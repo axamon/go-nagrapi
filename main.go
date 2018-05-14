@@ -68,13 +68,15 @@ type Critical2 struct {
 }
 
 type Critical struct {
-	Hostname, Currentattempt interface{}
-	Servicestatus            int
-	Servicedescription       string
-	Pluginoutput             string
+	Hostname           interface{}
+	Currentattempt     int
+	Servicestatus      int
+	Servicedescription string
+	Pluginoutput       string
 }
 
 var f = flag.String("f", "status.dat", "Path to the status.dat file to parse")
+var e = flag.Int("e", 2, "Nagios code to retrieve")
 
 func main() {
 	flag.Parse()
@@ -119,7 +121,11 @@ func main() {
 
 				}
 				if strings.Contains(sublinea, "current_attempt") {
-					servizio.Currentattempt, _ = estraivalore(sublinea, "current_attempt")
+					output, _ := estraivalore(sublinea, "current_attempt")
+					servizio.Currentattempt, err = strconv.Atoi(output.(string))
+					if err != nil {
+						fmt.Println("aristicazzi2")
+					}
 				}
 				if strings.Contains(sublinea, "service_description") {
 					output, _ := estraivalore(sublinea, "service_description")
@@ -139,7 +145,7 @@ func main() {
 	}
 	fmt.Println(len(servizi))
 	for _, servizio := range servizi {
-		if servizio.Servicestatus == 1 {
+		if servizio.Servicestatus == *e && servizio.Currentattempt < 1 {
 			fmt.Println(servizio)
 		}
 	}

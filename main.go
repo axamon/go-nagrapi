@@ -1,99 +1,159 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
-	"net/http"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"strconv"
-
-	"github.com/cxfcxf/nagtomaps"
-	"github.com/zenazn/goji"
+	"strings"
 )
 
-// Response ...
-type Response struct {
-	Hosts []*Host `json:"hosts,omitempty"`
+//Critical maps data for critical problems
+type Critical2 struct {
+	hostname                   string
+	servicedescription         string
+	modifiedattributes         int
+	checkcommand               string
+	checkperiod                string
+	notificationperiod         string
+	checkinterval              float64
+	retryinterval              float64
+	eventhandler               interface{}
+	hasbeenchecked             int
+	shouldbescheduled          int
+	checkexecutiontime         float64
+	checklatency               float64
+	checktype                  int
+	currentstate               int
+	lasthardstate              int
+	lasteventid                int
+	currenteventid             int
+	currentproblemid           int
+	lastproblemid              int
+	currentattempt             int
+	maxattempts                int
+	statetype                  int
+	laststatechange            int
+	lasthardstatechange        int
+	lasttimeok                 int
+	lasttimewarning            int
+	lasttimeunknown            int
+	lasttimecritical           int
+	pluginoutput               string
+	longpluginoutput           interface{}
+	performancedata            interface{}
+	lastcheck                  int
+	nextcheck                  int
+	checkoptions               int
+	currentnotificationnumber  int
+	currentnotificationid      int
+	lastnotification           int
+	nextnotification           int
+	nomorenotifications        int
+	notificationsenabled       int
+	activechecksenabled        int
+	passivechecksenabled       int
+	eventhandlerenabled        int
+	problemhasbeenacknowledged int
+	acknowledgementtype        int
+	flapdetectionenabled       int
+	failurepredictionenabled   int
+	processperformancedata     int
+	obsessoverservice          int
+	lastupdate                 int
+	isflapping                 int
+	percentstatechange         float64
+	scheduleddowntimedepth     int
 }
 
-// Host ...
-type Host struct {
-	Name     string     `json:"name,omitempty"`
-	Services []*Service `json:"services,omitempty"`
+type Critical struct {
+	Hostname, Currentattempt interface{}
+	Servicestatus            int
+	Servicedescription       string
+	Pluginoutput             string
 }
 
-// Service ...
-type Service struct {
-	Name string `json:"name,omitempty"`
-	//modified to *int in order to have json correctly identify the 0 value as a real value and not nil
-	CurrentState *int `json:"current_state,omitempty"`
-}
-
-var statusFile = flag.String("s", "/data/status.dat", "Specify the location of the status file")
-
-//added the n flag to have as output only services with that level of issue
-var nagiosstate = flag.Int("n", 0, "Specify the number Nagios uses to describe the status [0, 1, 2, 3]")
-
-// GetState ...
-func GetState(w http.ResponseWriter, r *http.Request) {
-	// Parse the status file
-	sdata := nagtomaps.ParseStatus(*statusFile)
-	//needed to have a int value to check it against nagios status level
-	nagstatus := *nagiosstate
-
-	hostResponse := &Response{
-		Hosts: nil,
-	}
-
-	for name := range sdata.Hoststatuslist {
-		host := &Host{
-			Name:     name,
-			Services: nil,
-		}
-
-		for name2, object2 := range sdata.Servicestatuslist[name] {
-
-			//if the state of the service does not match with the one in input interrupts the loop
-			currstateint, _ := strconv.Atoi(object2["current_state"])
-			if currstateint != nagstatus {
-				continue
-			}
-			if object2["host_name"] == host.Name {
-
-				service := &Service{
-					Name:         name2,
-					CurrentState: &currstateint,
-				}
-
-				host.Services = append(host.Services, service)
-
-			}
-		}
-
-		hostResponse.Hosts = append(hostResponse.Hosts, host)
-	}
-
-	// Marshal the result
-	response, err := json.Marshal(hostResponse)
-	if err != nil {
-		panic("Impossible to marshal")
-	}
-
-	// Write the response
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write(response)
-}
+var f = flag.String("f", "status.dat", "Path to the status.dat file to parse")
 
 func main() {
-	// Parse the flags
 	flag.Parse()
 
-	// Routes for API
-	goji.Get("/state", GetState)
+	b, err := ioutil.ReadFile(*f)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// Set the port
-	flag.Set("bind", ":8080")
+	file := string(b)
 
-	// Start the server
-	goji.Serve()
+	filesplittato := strings.Split(file, "}")
+
+	var servizi []Critical
+
+	//cicla file.
+	for _, linea := range filesplittato {
+		//fmt.Println(string(b))
+
+		//recupera servicestatus {
+		if strings.Contains(linea, "servicestatus {") {
+			var servizio Critical
+			//fmt.Println(linea)
+			linasplittata := strings.Split(linea, "\n")
+			for _, sublinea := range linasplittata {
+				if strings.ContainsAny(sublinea, "{}") {
+					continue
+				}
+				//fmt.Println(estraivalore(sublinea, "host_name"))
+				if strings.Contains(sublinea, "host_name") {
+					servizio.Hostname, _ = estraivalore(sublinea, "host_name")
+				}
+				if strings.Contains(sublinea, "current_state") {
+					output, err := estraivalore(sublinea, "current_state")
+					if err != nil {
+						fmt.Println("sti cazzi")
+					}
+					servizio.Servicestatus, err = strconv.Atoi(output.(string))
+					if err != nil {
+						fmt.Println("aristicazzi")
+					}
+
+				}
+				if strings.Contains(sublinea, "current_attempt") {
+					servizio.Currentattempt, _ = estraivalore(sublinea, "current_attempt")
+				}
+				if strings.Contains(sublinea, "service_description") {
+					output, _ := estraivalore(sublinea, "service_description")
+					servizio.Servicedescription = output.(string)
+				}
+				if strings.Contains(sublinea, "plugin_output") {
+					output, _ := estraivalore(sublinea, "plugin_output")
+					servizio.Pluginoutput = output.(string)
+				}
+
+				//fmt.Println(servizio)
+				servizi = append(servizi, servizio)
+			}
+
+		}
+
+	}
+	fmt.Println(len(servizi))
+	for _, servizio := range servizi {
+		if servizio.Servicestatus == 1 {
+			fmt.Println(servizio)
+		}
+	}
+
+	//inserisci campi in mappa
+}
+
+func estraivalore(sublinea, chiave string) (value interface{}, err error) {
+	elemento := strings.Split(sublinea, "=")
+	if strings.Contains(elemento[0], chiave) {
+
+		value = elemento[1]
+		//fmt.Println(value)
+		return value, nil
+	}
+	return nil, fmt.Errorf("problema")
 }
